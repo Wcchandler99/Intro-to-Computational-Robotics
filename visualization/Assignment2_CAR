@@ -1,0 +1,85 @@
+import numpy as np
+import math
+import json
+import os
+from geometry import * 
+from threejs_group import *
+
+# Function to create a quaternion from Z-axis rotation
+def quaternion_from_angle_z(theta):
+    return [np.cos(theta/2), 0, 0, np.sin(theta/2)]
+
+def generate_scene(environment):
+    """Generates a scene with a specified number of spheres, each with a random radius and position."""
+    scene = []
+    for i in range(len(environment)):
+        radius = environment[i][3]
+        position = [environment[i][0], environment[i][1], environment[i][2]] # change range for populating according to each axis
+        scene.append({"type": "sphere", "name": f"sphere_{i}", "radius": radius, "position": position})
+    return scene
+
+def scene_to_file(scene, filename):
+    """Writes the scene to a JSON file."""
+    directory = os.path.dirname(filename)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+    with open(filename, 'w') as file:
+        json.dump(scene, file)
+
+def scene_from_file(filename):
+    """Reads the scene from a JSON file."""
+    with open(filename, 'r') as file:
+        return json.load(file)
+    
+def visualize_scene(scene, output_filename):
+    """Generates an HTML file for visualizing the scene."""
+    viz_out = threejs_group(js_dir="../js") 
+    for obj in scene:
+        geom = sphere(obj["name"], obj["radius"], obj["position"], [1, 0, 0, 0])
+        viz_out.add_obstacle(geom, "0x0000ff")  # Using blue for all spheres for consistency
+    viz_out.to_html(output_filename, "out/") 
+
+if __name__ == "__main__":
+
+    red="0xff0000"
+    green="0x00ff00"
+    purple="0xff00ff"
+    blue="0x0000ff"
+
+    car_traj = []
+    velocity = 1
+    car_length = 1.5
+    state_space = [0, 0, 0] 
+    control = [1, 1]
+    state_space = [0, 0, 0]
+    
+    environment = [[5, 5, 0, 3],
+                   [6, 3, 0, 3],
+                   [2, 9, 0, 3],]
+    viz_out = threejs_group(js_dir="../js")
+    
+    scene_name = "map_scene"
+    scene = generate_scene(environment)  # Generate the scene
+    scene_file = f"{scene_name}.json"  # Name the file based on the scene parameters
+    scene_to_file(scene, scene_file)  # Save the scene to a file
+    loaded_scene = scene_from_file(scene_file)  # Load the scene from the file
+    
+    # Generate visualization HTML file
+    visualize_scene(scene, f"{scene_name}_visualization.html")
+
+
+    for t in np.arange(0, 10, .01, dtype=float):
+        # state: [time, position, quarternion (orientation), color]
+        state_space = [state_space[0] + control[0]*np.cos(state_space[2]), 
+                       state_space[1] + control[0]*np.sin(state_space[2]), 
+                       state_space[2] + (control[0]/car_length)*np.tan(control[1])]
+        
+        
+        car_state = [t, [t*state_space[0], t*state_space[1], .5], quaternion_from_angle_z(state_space[2]), green] #quaternion_from_angle(state_space[2])
+        car_traj.append(car_state) #trajectory is an array of states
+    
+    car = box("car_0", 2, 1, 1, car_traj[0][1], car_traj[0][2])
+
+
+    viz_out.add_animation(car, car_traj)
+    viz_out.to_html("animation.html", "out/");
